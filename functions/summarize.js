@@ -126,8 +126,8 @@ ${text}
 
     if (!summary) summary = isChinese ? "AI 未能生成摘要。" : "AI could not generate a summary.";
 
-    // 如果输出不含 HTML 标签，说明是纯文本，把换行转成 <br>
-    if (!/<[a-z][\s\S]*>/i.test(summary)) {
+    // 没有 <p> 标签时，把换行转成 <br>
+    if (!/<p[\s>]/i.test(summary)) {
       summary = summary.replace(/\n/g, "<br>");
     }
 
