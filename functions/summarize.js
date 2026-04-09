@@ -1,6 +1,8 @@
 // functions/summarize.js
-// Netlify Functions 运行在 Node 18+，原生支持 fetch，无需 node-fetch
 exports.handler = async function(event, context) {
+  // 动态 import node-fetch，兼容 v3 ES Module
+  const fetch = (await import("node-fetch")).default;
+
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -25,8 +27,8 @@ exports.handler = async function(event, context) {
 
     if (!text) throw new Error("No text provided");
 
-    // 限制最大长度，防止 token 爆 & 超时
-    text = text.slice(0, 5000);
+    // 限制最大长度，防止 token 爆
+    text = text.slice(0, 10000);
 
     const isChinese = /[\u4e00-\u9fa5]/.test(text.slice(0, 200));
 
@@ -84,49 +86,22 @@ Document:
 ${text}
 `;
 
-    // 调用 Google Gemini API，超时设为 9s（Netlify 函数限制 10s）
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 9000);
-
-    let response;
-    try {
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${process.env.GOOGLE_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.2, maxOutputTokens: 800 },
-          }),
-          signal: controller.signal,
-        }
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error("Gemini API error:", response.status, errBody);
-      throw new Error(`Gemini API returned ${response.status}`);
-    }
+    // 调用 Google Gemini API
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${process.env.GOOGLE_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+        }),
+      }
+    );
 
     const data = await response.json();
 
-    const candidate = data.candidates?.[0];
-    if (!candidate) {
-      console.error("Gemini returned no candidates:", JSON.stringify(data));
-      throw new Error("No candidates returned from Gemini");
-    }
-
-    const finishReason = candidate.finishReason;
-    if (finishReason && finishReason !== "STOP") {
-      console.error("Gemini finish reason:", finishReason);
-      throw new Error(`Gemini stopped with reason: ${finishReason}`);
-    }
-
-    let summary = candidate.content?.parts?.[0]?.text || "";
+    let summary = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
     // 清理 Markdown 或多余换行
     summary = summary.replace(/^```html\s*/i, "")
@@ -139,12 +114,7 @@ ${text}
     return { statusCode: 200, body: JSON.stringify({ summary }), headers };
 
   } catch (err) {
-    const isAbort = err.name === "AbortError";
-    console.error("Serverless Error:", isAbort ? "Gemini request timed out" : err.message);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: isAbort ? "Request timed out" : err.message }),
-      headers
-    };
+    console.error("Serverless Error:", err);
+    return { statusCode: 500, body: JSON.stringify({ error: err.message }), headers };
   }
 };
