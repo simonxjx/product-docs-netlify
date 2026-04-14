@@ -114,7 +114,15 @@ ${text}
       let summary = (json.choices?.[0]?.message?.content || "")
         .replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
 
-      // 去除多余 <br>
+      // 1. Markdown → HTML 兜底转换
+      summary = summary
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/^- (.+)$/gm, "<li>$1</li>")
+        .replace(/(<li>.*<\/li>)/s, "<ul>$1</ul>")
+        .replace(/\n{2,}/g, "<br><br>")
+        .replace(/\n/g, "<br>");
+
+      // 2. 去除 <ul>/<li> 前后多余的 <br>
       summary = summary
         .replace(/<br>\s*(<ul>)/gi, "$1")
         .replace(/(<ul>)\s*<br>/gi, "$1")
@@ -124,7 +132,6 @@ ${text}
         .replace(/(<\/strong>:?)\s*(<br>)+/gi, "$1<br>");
 
       if (!summary) summary = isChinese ? "AI 未能生成摘要。" : "AI could not generate a summary.";
-      if (!/<p[\s>]/i.test(summary)) summary = summary.replace(/\n/g, "<br>");
       return summary;
     }
 
