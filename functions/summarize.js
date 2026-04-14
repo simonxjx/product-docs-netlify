@@ -118,7 +118,8 @@ ${text}
       summary = summary
         .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
         .replace(/^- (.+)$/gm, "<li>$1</li>")
-        .replace(/(<li>[\s\S]*?<\/li>)+/g, match => `<ul>${match}</ul>`)
+        .replace(/<\/?ul>/gi, "")                                          // ← 新增：先剥掉所有已有的 <ul>
+        .replace(/(<li>[\s\S]*?<\/li>)+/g, match => `<ul>${match}</ul>`)  // 再统一重新包裹
         .replace(/\n{2,}/g, "<br><br>")
         .replace(/\n/g, "<br>");
 
