@@ -113,6 +113,16 @@ ${text}
       const json = await res.json();
       let summary = (json.choices?.[0]?.message?.content || "")
         .replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
+
+      // 去除多余 <br>
+      summary = summary
+        .replace(/<br>\s*(<ul>)/gi, "$1")
+        .replace(/(<ul>)\s*<br>/gi, "$1")
+        .replace(/<br>\s*(<li>)/gi, "$1")
+        .replace(/(<\/li>)\s*<br>/gi, "$1")
+        .replace(/<br>\s*(<\/ul>)/gi, "$1")
+        .replace(/(<\/strong>:?)\s*(<br>)+/gi, "$1<br>");
+
       if (!summary) summary = isChinese ? "AI 未能生成摘要。" : "AI could not generate a summary.";
       if (!/<p[\s>]/i.test(summary)) summary = summary.replace(/\n/g, "<br>");
       return summary;
