@@ -118,12 +118,16 @@ ${text}
       summary = summary
         .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
         .replace(/^- (.+)$/gm, "<li>$1</li>")
-        .replace(/(<li>.*<\/li>)/s, "<ul>$1</ul>")
+        .replace(/(<li>[\s\S]*?<\/li>)+/g, match => `<ul>${match}</ul>`)  // 包裹连续的 <li>
+        .replace(/<ul>\s*<ul>/g, "<ul>")                                   // 去除嵌套 <ul>
+        .replace(/<\/ul>\s*<\/ul>/g, "</ul>")                              // 去除嵌套 </ul>
         .replace(/\n{2,}/g, "<br><br>")
         .replace(/\n/g, "<br>");
 
       // 2. 去除 <ul>/<li> 前后多余的 <br>
       summary = summary
+        .replace(/<ul>\s*<ul>/g, "<ul>")          // ← 新增，防嵌套
+        .replace(/<\/ul>\s*<\/ul>/g, "</ul>")     // ← 新增，防嵌套
         .replace(/<br>\s*(<ul>)/gi, "$1")
         .replace(/(<ul>)\s*<br>/gi, "$1")
         .replace(/<br>\s*(<li>)/gi, "$1")
