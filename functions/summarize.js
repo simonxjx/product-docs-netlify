@@ -133,7 +133,8 @@ ${text}
         .replace(/<br>\s*(<li>)/gi, "$1")
         .replace(/(<\/li>)\s*<br>/gi, "$1")
         .replace(/<br>\s*(<\/ul>)/gi, "$1")
-        .replace(/(<\/strong>:?)\s*(<br>)+/gi, "$1<br>");
+        .replace(/(<\/strong>:?)\s*(<br>)+/gi, "$1<br>")
+        .replace(/(<br>)+\s*(<\/ul>|<\/div>)/gi, "$2")  // ← 新增：去除末尾多余 <br>
 
       if (!summary) summary = isChinese ? "AI 未能生成摘要。" : "AI could not generate a summary.";
       return summary;
