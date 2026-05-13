@@ -83,6 +83,64 @@ Document:
 ${text}
 `;
 
+    // ── Cerebras 兜底函数（仅在 Groq 失败时调用）────────────────
+    async function callCerebras() {
+      console.log("Groq failed, falling back to Cerebras...");
+      const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.CEREBRAS_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "llama3.1-8b",
+          messages: [
+            {
+              role: "system",
+              content: "You must output HTML only. Use <strong> for bold, <br> for line breaks, <ul><li> for lists. Do not use Markdown syntax like **, *, or -. Do not wrap output in code blocks."
+            },
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.2,
+          max_tokens: 2048,
+        }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text();
+        console.error("Cerebras API error:", res.status, errBody);
+        throw new Error(`Cerebras API returned ${res.status}`);
+      }
+      const json = await res.json();
+      let summary = (json.choices?.[0]?.message?.content || "")
+        .replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
+
+      summary = summary
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/^- (.+)$/gm, "<li>$1</li>")
+        .replace(/<\/?ul>/gi, "")
+        .replace(/(<li>[\s\S]*?<\/li>)+/g, match => `<ul>${match}</ul>`)
+        .replace(/\n{2,}/g, "<br><br>")
+        .replace(/\n/g, "<br>");
+
+      summary = summary
+        .replace(/<ul>\s*<ul>/g, "<ul>")
+        .replace(/<\/ul>\s*<\/ul>/g, "</ul>")
+        .replace(/<\/ul>\s*(<br>)?\s*<ul>/g, "")
+        .replace(/<br>\s*(<ul>)/gi, "$1")
+        .replace(/(<ul>)\s*<br>/gi, "$1")
+        .replace(/<br>\s*(<li>)/gi, "$1")
+        .replace(/(<\/li>)\s*<br>/gi, "$1")
+        .replace(/<br>\s*(<\/ul>)/gi, "$1")
+        .replace(/(<\/strong>:?)\s*(<br>)+/gi, "$1<br>")
+        .replace(/\r?\n/g, "<br>")
+        .replace(/(<br>\s*)+(<\/div>)/gi, "$2")
+        .replace(/(<br>\s*)+$/gi, "")
+        .replace(/(<br\s*\/?>\s*){3,}/gi, "<br><br>");
+
+      if (!summary) summary = isChinese ? "AI 未能生成摘要。" : "AI could not generate a summary.";
+      return summary;
+    }
+
     // ── Groq 兜底函数（仅在 Gemini 失败时调用）──────────────────
     async function callGroq() {
       console.log("Gemini failed, falling back to Groq...");
@@ -95,8 +153,8 @@ ${text}
         body: JSON.stringify({
           model: "llama-3.1-8b-instant",
           messages: [
-            { 
-              role: "system", 
+            {
+              role: "system",
               content: "You must output HTML only. Use <strong> for bold, <br> for line breaks, <ul><li> for lists. Do not use Markdown syntax like **, *, or -. Do not wrap output in code blocks."
             },
             { role: "user", content: prompt }
@@ -161,7 +219,7 @@ ${text}
       const errBody = await response.text();
       console.error("Gemini API error:", response.status, errBody);
       // ← 唯一改动：Gemini 失败则 fallback
-      return { statusCode: 200, body: JSON.stringify({ summary: await callGroq() }), headers };
+      return { statusCode: 200, body: JSON.stringify({ summary: await callGroq().catch(() => callCerebras()) }), headers };
     }
 
     const data = await response.json();
@@ -170,14 +228,14 @@ ${text}
     if (!candidate) {
       console.error("Gemini returned no candidates:", JSON.stringify(data));
       // ← 唯一改动：Gemini 无结果则 fallback
-      return { statusCode: 200, body: JSON.stringify({ summary: await callGroq() }), headers };
+      return { statusCode: 200, body: JSON.stringify({ summary: await callGroq().catch(() => callCerebras()) }), headers };
     }
 
     const finishReason = candidate.finishReason;
     if (finishReason && finishReason !== "STOP") {
       console.error("Gemini finish reason:", finishReason);
       // ← 唯一改动：Gemini 异常终止则 fallback
-      return { statusCode: 200, body: JSON.stringify({ summary: await callGroq() }), headers };
+      return { statusCode: 200, body: JSON.stringify({ summary: await callGroq().catch(() => callCerebras()) }), headers };
     }
 
     let summary = candidate.content?.parts?.[0]?.text || "";
